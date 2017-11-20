@@ -312,6 +312,7 @@
             XHR({
                 url: u.settings.ajax_base + "/signing_key/",
                 extra_params: args,
+                headers: u.settings.headers,
                 load_callback: function(e) {
                     var json = JSON.parse(e.target.responseText);
                     var utc_suffix = /Z|\+00:?00$/.test(json.date.toString()) ? '' : 'Z';
@@ -705,7 +706,8 @@
 
             XHR({
                 url:url,
-                extra_params:args
+                extra_params:args,
+                headers: u.settings.headers,
             });
 
         };
