@@ -1172,7 +1172,7 @@
             var string_to_sign = this.get_string_to_sign(canonical_request, this.request_date);
 
             if (this.settings.auth.signing_method) {
-                this.settings.auth.signing_method(string_to_sign, utils.iso8601(this.request_date), callback);
+                this.settings.auth.signing_method(string_to_sign, utils.iso8601(this.request_date), canonical_request, callback);
             } else {
                 var signature = this.sign_request(string_to_sign);
 
