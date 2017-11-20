@@ -317,6 +317,7 @@
                     var utc_suffix = /Z|\+00:?00$/.test(json.date.toString()) ? '' : 'Z';
                     json.date = new Date(json.date + utc_suffix);
                     u.auth = json;
+                    u.auth.signing_method = u.settings.signing_method;
                     u.upload_id = json.upload_id;
                     u.chunks = json.chunks;
                     u.settings.key = json.key || u.settings.key;
@@ -1114,40 +1115,42 @@
             header_keys.sort();
             self.settings.querystring["X-Amz-SignedHeaders"] = utils.uriencode(header_keys.join(';'));
 
-            self.settings.querystring["X-Amz-Signature"] = self.get_authorization_header();
+            self.get_authorization_header(function(signature) {
+                self.settings.querystring["X-Amz-Signature"] = signature;
 
-            var url = location.protocol + "//" + self.headers['host'] + "/" + self.settings.key;
-            delete self.headers['host'];  // keep this header only for hashing
+                var url = location.protocol + "//" + self.headers['host'] + "/" + self.settings.key;
+                delete self.headers['host'];  // keep this header only for hashing
 
-            var first = true;
-            for(var key in self.settings.querystring) {
-                if(self.settings.querystring.hasOwnProperty(key)) {
-                    if(first) {
-                        url += "?";
+                var first = true;
+                for(var key in self.settings.querystring) {
+                    if(self.settings.querystring.hasOwnProperty(key)) {
+                        if(first) {
+                            url += "?";
+                        }
+                        first = false;
+                        url += key + "=" + self.settings.querystring[key] + "&";
                     }
-                    first = false;
-                    url += key + "=" + self.settings.querystring[key] + "&";
                 }
-            }
-            url = url.slice(0, -1);  // remove extra ampersand
-
-            var xhr = XHR({
-                url: url,
-                method: self.settings.method,
-                headers: self.headers,
-                body: self.settings.payload,
-
-                load_callback: self.settings.load_callback,
-                progress_callback: self.settings.progress_callback,
-                state_change_callback: self.settings.state_change_callback,
-                error_callback: self.settings.error_callback,
-                timeout_callback: self.settings.timeout_callback
+                url = url.slice(0, -1);  // remove extra ampersand
+    
+                var xhr = XHR({
+                    url: url,
+                    method: self.settings.method,
+                    headers: self.headers,
+                    body: self.settings.payload,
+    
+                    load_callback: self.settings.load_callback,
+                    progress_callback: self.settings.progress_callback,
+                    state_change_callback: self.settings.state_change_callback,
+                    error_callback: self.settings.error_callback,
+                    timeout_callback: self.settings.timeout_callback
+                });
+                if(callback) {
+                    callback(xhr);
+                }
             });
-            if(callback) {
-                callback(xhr);
-            }
         },
-        get_authorization_header: function() {
+        get_authorization_header: function(callback) {
             if(!this.settings.auth.date) {
                 throw "Invalid date given.";
             }
@@ -1165,9 +1168,14 @@
 
             var canonical_request = this.get_canonical_request();
             var string_to_sign = this.get_string_to_sign(canonical_request, this.request_date);
-            var signature = this.sign_request(string_to_sign);
 
-            return signature;
+            if (this.settings.auth.signing_method) {
+                this.settings.auth.signing_method(string_to_sign, utils.iso8601(this.request_date), callback);
+            } else {
+                var signature = this.sign_request(string_to_sign);
+
+                callback(signature);
+            }
         },
         get_canonical_request: function() {
             var request = "";
