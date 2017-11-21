@@ -82,7 +82,7 @@
     };
 
     namespace.mule_upload = function(settings) {
-        var debug = true;
+        var debug = settings.hasOwnProperty('debug') ? settings.debug : true;
 
         // custom logging function that prepends a text for easy identification;
         // it is also toggled by the `debug` flag
