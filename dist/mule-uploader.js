@@ -1,8 +1,8 @@
-/*! mule-uploader - v1.2.0 - 2016-09-28
+/*! mule-uploader - v1.2.0 - 2018-04-04
 * https://github.com/cinely/mule-uploader
-* Copyright (c) 2016 Gabi Purcaru; Licensed MIT */
+* Copyright (c) 2018 Gabi Purcaru; Licensed MIT */
 (function(namespace){
-    
+
     // AJAX helper. It takes an object that contains load_callback, error_callback,
     // url, method, headers, state_change_callback, progress_callback
     var XHR = function(args) {
@@ -76,7 +76,7 @@
     };
 
     namespace.mule_upload = function(settings) {
-        var debug = true;
+        var debug = settings.hasOwnProperty('debug') ? settings.debug : true;
 
         // custom logging function that prepends a text for easy identification;
         // it is also toggled by the `debug` flag
@@ -306,11 +306,13 @@
             XHR({
                 url: u.settings.ajax_base + "/signing_key/",
                 extra_params: args,
+                headers: u.settings.headers,
                 load_callback: function(e) {
                     var json = JSON.parse(e.target.responseText);
                     var utc_suffix = /Z|\+00:?00$/.test(json.date.toString()) ? '' : 'Z';
                     json.date = new Date(json.date + utc_suffix);
                     u.auth = json;
+                    u.auth.signing_method = u.settings.signing_method;
                     u.upload_id = json.upload_id;
                     u.chunks = json.chunks;
                     u.settings.key = json.key || u.settings.key;
@@ -698,7 +700,8 @@
 
             XHR({
                 url:url,
-                extra_params:args
+                extra_params:args,
+                headers: u.settings.headers,
             });
 
         };
@@ -1083,7 +1086,7 @@
             self.request_date = new Date();
 
             self.headers = self.settings.headers;
-            self.headers['host'] = self.settings.auth.bucket + ".s3" + utils.region_string(self.settings.auth.region) + ".amazonaws.com";
+            self.headers['host'] = 's3-'+self.settings.auth.region + ".amazonaws.com";
 
             var date_string = [
                 self.settings.auth.date.getUTCFullYear(),
@@ -1108,40 +1111,42 @@
             header_keys.sort();
             self.settings.querystring["X-Amz-SignedHeaders"] = utils.uriencode(header_keys.join(';'));
 
-            self.settings.querystring["X-Amz-Signature"] = self.get_authorization_header();
+            self.get_authorization_header(function(signature) {
+                self.settings.querystring["X-Amz-Signature"] = signature;
 
-            var url = location.protocol + "//" + self.headers['host'] + "/" + self.settings.key;
-            delete self.headers['host'];  // keep this header only for hashing
+                var url = location.protocol + "//" + self.headers['host'] + "/" + self.settings.auth.bucket + "/" + self.settings.key;
+                delete self.headers['host'];  // keep this header only for hashing
 
-            var first = true;
-            for(var key in self.settings.querystring) {
-                if(self.settings.querystring.hasOwnProperty(key)) {
-                    if(first) {
-                        url += "?";
+                var first = true;
+                for(var key in self.settings.querystring) {
+                    if(self.settings.querystring.hasOwnProperty(key)) {
+                        if(first) {
+                            url += "?";
+                        }
+                        first = false;
+                        url += key + "=" + self.settings.querystring[key] + "&";
                     }
-                    first = false;
-                    url += key + "=" + self.settings.querystring[key] + "&";
                 }
-            }
-            url = url.slice(0, -1);  // remove extra ampersand
+                url = url.slice(0, -1);  // remove extra ampersand
 
-            var xhr = XHR({
-                url: url,
-                method: self.settings.method,
-                headers: self.headers,
-                body: self.settings.payload,
+                var xhr = XHR({
+                    url: url,
+                    method: self.settings.method,
+                    headers: self.headers,
+                    body: self.settings.payload,
 
-                load_callback: self.settings.load_callback,
-                progress_callback: self.settings.progress_callback,
-                state_change_callback: self.settings.state_change_callback,
-                error_callback: self.settings.error_callback,
-                timeout_callback: self.settings.timeout_callback
+                    load_callback: self.settings.load_callback,
+                    progress_callback: self.settings.progress_callback,
+                    state_change_callback: self.settings.state_change_callback,
+                    error_callback: self.settings.error_callback,
+                    timeout_callback: self.settings.timeout_callback
+                });
+                if(callback) {
+                    callback(xhr);
+                }
             });
-            if(callback) {
-                callback(xhr);
-            }
         },
-        get_authorization_header: function() {
+        get_authorization_header: function(callback) {
             if(!this.settings.auth.date) {
                 throw "Invalid date given.";
             }
@@ -1159,9 +1164,14 @@
 
             var canonical_request = this.get_canonical_request();
             var string_to_sign = this.get_string_to_sign(canonical_request, this.request_date);
-            var signature = this.sign_request(string_to_sign);
 
-            return signature;
+            if (this.settings.auth.signing_method) {
+                this.settings.auth.signing_method(string_to_sign, utils.iso8601(this.request_date), canonical_request, callback);
+            } else {
+                var signature = this.sign_request(string_to_sign);
+
+                callback(signature);
+            }
         },
         get_canonical_request: function() {
             var request = "";
@@ -1170,7 +1180,7 @@
             request += this.settings.method.toUpperCase() + "\n";
 
             // path
-            request += "/" + utils.uriencode(this.settings.key).replace(/%2F/g, "/") + "\n";
+            request += "/" + utils.uriencode(this.settings.auth.bucket + "/" + this.settings.key).replace(/%2F/g, "/") + "\n";
 
             // querystring
             var querystring_keys = utils.get_sorted_keys(this.settings.querystring);
