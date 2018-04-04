@@ -257,6 +257,8 @@
                 u.current_file_index++;
             }
 
+            u.set_state("waiting");
+
             // check if all files processed
             if (u.current_file_index >= u.files.length){
                 u.settings.on_complete_all.call(u);
@@ -264,7 +266,6 @@
             }
 
             //reset for new file
-            u.set_state("waiting");
             u.settings.on_progress.call(u, 0, 0);
             u.upload_id = null;
             u._progress = null;
