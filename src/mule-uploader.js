@@ -149,7 +149,12 @@
 
             // the S3 object key; I recommend to generate this dynamically (e.g.
             // a random string) to avoid unwanted overwrites.
-            settings.key = settings.key || "the_key";
+            // if key is empty - file.name used as a key
+            settings.key = settings.key || "";
+            settings._key = settings.key; //remember original settings key for multi-file upload case
+
+            // "sub-directory" for the uploaded files, used if settings.key is empty
+            settings.key_prefix = settings.key_prefix || "";
 
             // the Amazon S3 bucket where you'll store the uploads
             settings.bucket = settings.bucket;
@@ -160,7 +165,12 @@
             // the Mime-Type of the content. You must match this with the backend value
             // or you'll get an Invalid Signature error. If unsure about the
             // mime type, use application/octet-stream
-            settings.content_type = settings.content_type || "application/octet-stream";
+            // if no content_type defined - file.type will be used
+            settings.content_type = settings.content_type || "";
+
+            //if content_disposition is explicitly set to false - don't add it to requests
+            //otherwise all uploaded files will be uploaded as an "attachment"
+            settings.content_disposition = settings.content_disposition !== false;
 
 
             // acl can be set to:
@@ -179,6 +189,7 @@
             settings.on_select = settings.on_select                 || function() {};
             settings.on_error = settings.on_error                   || function() {};
             settings.on_complete = settings.on_complete             || function() {};
+            settings.on_complete_all = settings.on_complete_all     || function() {};
             settings.on_init = settings.on_init                     || function() {};
             settings.on_start = settings.on_start                   || function() {};
             settings.on_chunk_uploaded = settings.on_chunk_uploaded || function() {};
@@ -197,7 +208,7 @@
             u.set_state("waiting");
 
             if (u.input) {
-                u.input.onchange = function(e, force) {
+                u.input.onchange = function(e) {
                     if(!u.settings.autostart) {
                         return true;
                     }
@@ -207,10 +218,20 @@
                         return false;
                     }
 
-                    // the uploader doesn't support multiple uploads at this time,
-                    // so we get the first file
-                    var file = e.target.files[0];
-                    u.upload_file(file, force);
+                    //support for multiple files upload
+                    u.files = e.target.files;
+                    u.current_file_index = -1;
+                    u.files_uploaded = 0;
+                    u.files_total = u.files.length;
+                    //remember total filesize for use in total progress
+                    u.files_total_size = 0;
+                    u.files_total_uploaded_size = 0;
+                    for (var i = 0; i < u.files_total; i++) {
+                        u.files_total_size+=u.files[i].size;
+                    }
+
+                    //proceed with first file
+                    u.upload_file();
                     return true;
                 };
             }
@@ -222,29 +243,50 @@
         }
 
         Uploader.prototype.start = function() {
-            if(this.input && this.input.files && this.input.files.length > 0) {
-                return this.upload_file(this.input.files[0], false);
+            if (this.input && this.input.files && this.input.files.length > 0) {
+                return this.upload_file(false);
             } else {
-                alert("No file selected");
+                alert("No file(s) selected");
             }
         };
 
-        Uploader.prototype.upload_file = function(file, force) {
+        // if force=true - don't proceed next file, instead force re-upload current file
+        Uploader.prototype.upload_file = function(force) {
             var u = this;
-            // the `onchange` event may be triggered multiple times, so we
-            // must ensure that the callback is only executed the first time
-            // also make sure the file is not already set.
-            if(u.get_state() != "waiting") {
-                return false;
+            if (!force) {
+                u.current_file_index++;
             }
 
-            if (file) {
-                u.file = file;
+            // check if all files processed
+            if (u.current_file_index >= u.files.length){
+                u.settings.on_complete_all.call(u);
+                return;
             }
+
+            //reset for new file
+            u.set_state("waiting");
+            u.settings.on_progress.call(u, 0, 0);
+            u.upload_id = null;
+            u._progress = null;
+            u._total_progress = null;
+            u._loaded_chunks = null;
+            u._uploading_chunks = null;
+            u._chunks = null;
+
+            var file = u.files[ u.current_file_index ];
+            u.file = file;
 
             if (!u.file) {
                 return false;
             }
+
+            //set key for current file upload
+            if (u.settings._key=='') {
+                u.settings.key = u.settings.key_prefix + file.name;
+            } else {
+                u.settings.key = u.settings._key;
+            }
+            if (u.settings.content_type=='') u.settings.content_type = file.type;
 
             // we use the lastModifiedDate, the file name and size to uniquely
             // identify a file. There may be false positives and negatives,
@@ -255,10 +297,15 @@
 
             if(u.file.size > u.settings.max_size) {
                 alert(
-                    ["The maximum allowed file size is ",
-                    (u.settings.max_size / GB),
-                    "GB. Please select another file."].join('')
+                    [
+                        "The maximum allowed file size is ",
+                        (u.settings.max_size / GB),
+                        "GB. Please select another file.",
+                        "\nFile: ",
+                        file.name
+                    ].join('')
                 );
+                u.upload_file(); //upload next file
                 return false;
             }
 
@@ -282,25 +329,44 @@
                 // if the file is not accepted, notify the user and return
                 if(!file_accepted) {
                     alert(
-                        ["This file format is not accepted. ",
-                        "Please use a file with an extension like ",
-                        u.settings.accepted_extensions].join('')
+                        [
+                            "This file format is not accepted. ",
+                            "Please use a file with an extension like ",
+                            u.settings.accepted_extensions,
+                            "\nFile: ",
+                            file.name
+                        ].join('')
                     );
+                    u.upload_file();//upload next file
                     return false;
                 }
             }
 
-            // initialize the file upload
-            u.settings.on_select.call(u, file);
+            file.is_force = force;
+            // trigger the on_select event callback
+            if ( u.settings.on_select.call(u, file, u.on_selected)=== false ) {
+                // if on_select returns exactly false - just wait for on_selected callback;
+            } else {
+            //otherwise - just proceed with upload
+                u.on_selected(file);
+            }
 
+        };
+
+        //called after on_select event
+        Uploader.prototype.on_selected = function (file) {
+            var u = this;
+
+            // initialize the file upload
             var args = utils.extend_object(u.settings.extra_params || {}, {
                 filename: file.name,
                 filesize: file.size,
                 content_type: file.type,
-                last_modified: file.lastModifiedDate.valueOf()
+                last_modified: file.lastModifiedDate.valueOf(),
+                contenttype: u.settings.content_type
             });
 
-            if(force) {
+            if (file.is_force) {
                 args.force = true;
             }
 
@@ -325,7 +391,10 @@
                     u.settings.backup_key = u.settings.key;
 
                     if(!u.upload_id) {
-                        AmazonXHR.init(json, u.settings.key, file, function(e) {
+                        AmazonXHR.init(json, u.settings.key, file, u.settings, function(e) {
+                            if(e.target.status / 100 != 2) {
+                                return u.settings.on_error(e);
+                            }
                             var xml = e.target.responseXML;
 
                             // get the given upload id
@@ -335,7 +404,7 @@
                         });
                     } else {
                         // resume a previus upload
-                        if(!force) {
+                        if(!file.is_force) {
                             // get the uploaded parts from S3
                             AmazonXHR.list(u.auth, u.file, u.settings.key, u.upload_id, u.settings.chunk_size, function(parts) {
                                 for(var i=0; i<parts.length; i++) {
@@ -356,7 +425,7 @@
                                 u._uploading_chunks = null;
                                 u._chunks = null;
                                 u.settings.key = u.settings.backup_key;
-                                u.upload_file(file, true); // force reload
+                                u.upload_file(true); // force reload
                             });
                         } else {
                             // force-start the upload
@@ -543,8 +612,13 @@
                     // trigger a final progress event callback, with 100%
                     u.settings.on_progress.call(u, u.file.size, u.file.size);
 
+                    u.files_total_uploaded_size += u.file.size;
+
                     // also trigger the complete event callback
-                    u.settings.on_complete.call(u);
+                    u.settings.on_complete.call(u, u.file);
+
+                    //upload next file if any
+                    u.upload_file();
                 }, function() {
                     // we have a genuine error
                     log("Error: ");
@@ -623,7 +697,6 @@
 
             u.settings.on_progress.call(u, u.file.size, u.file.size); // 100% done.
 
-
             var handler = function(e) {
                 // i.e. if it's a 2XX response
                 if(e.target.status / 100 == 2) {
@@ -633,6 +706,11 @@
 
                     // trigger the complete event callback
                     u.settings.on_complete.call(u);
+                    u.files_total_uploaded_size += u.file.size;
+
+                    //upload next file if any
+                    u.upload_file();
+
                 } else if(e.target.status == 400 &&
                     e.target.responseText.indexOf("EntityTooSmall") !== -1) {
                     // an "EntityTooSmall" error means that we missed a chunk
@@ -646,7 +724,7 @@
                     // 404 = NoSuchUpload = check if already finished
                     // if so, start a new upload
                     u.cancel(function() {
-                        u.upload_file(u.file, true);
+                        u.upload_file(true);
                     });
                 } else {
                     u.check_already_uploaded(function() {
@@ -942,6 +1020,7 @@
         Uploader.prototype.on_select = function(f) { this.settings.on_select = f; };
         Uploader.prototype.on_error = function(f) { this.settings.on_error = f; };
         Uploader.prototype.on_complete = function(f) { this.settings.on_complete = f; };
+        Uploader.prototype.on_complete_all = function(f) { this.settings.on_complete_all = f; };
         Uploader.prototype.on_init = function(f) { this.settings.on_init = f; };
         Uploader.prototype.on_start = function(f) { this.settings.on_start = f; };
         Uploader.prototype.on_chunk_uploaded = function(f) { this.settings.on_chunk_uploaded = f; };
@@ -1019,7 +1098,7 @@
                     if(part_number != num_chunks && size != chunk_size) {
                         continue; // chunk corrupted
                     } else if(part_number == num_chunks &&
-                            size != file.size % chunk_size) {
+                        size != file.size % chunk_size) {
                         continue; // final chunk corrupted
                     }
 
@@ -1069,7 +1148,7 @@
             state_change_callback: readystate_callback
         })).send(xhr_callback);
     };
-    AmazonXHR.init = function(auth, key, file, callback) {
+    AmazonXHR.init = function(auth, key, file, u_settings, callback) {
         return new AmazonXHR({
             auth: auth,
             key: key,
@@ -1079,7 +1158,7 @@
             },
             headers: {
                 "x-amz-acl": "public-read",
-                "Content-Disposition": "attachment; filename=" + encodeURIComponent(file.name),
+                "Content-Disposition": u_settings.content_disposition ? "attachment; filename=" + file.name : '',
                 "Content-Type": auth.content_type || "application/octet-stream"
             },
             payload: "",
@@ -1253,7 +1332,7 @@
 
             // AWS percent-encodes some extra non-standard characters in a URI
             output = output.replace(/[*]/g, function(ch) {
-              return '%' + ch.charCodeAt(0).toString(16).toUpperCase();
+                return '%' + ch.charCodeAt(0).toString(16).toUpperCase();
             });
 
             return output;
