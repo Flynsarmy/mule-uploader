@@ -816,7 +816,6 @@
                 };
             }
 
-            console.log(u.settings);
             var host = "s3" + utils.region_string(u.settings.region) + ".amazonaws.com";
             var url = location.protocol + "//" + host + "/" + u.settings.bucket + "/" + path;
             XHR({
