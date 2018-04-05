@@ -129,6 +129,7 @@
             // make the input element another possible setting
             // in some cases (e.g. drag & drop) there is no input element
             u.input = settings.file_input;
+            u.dropzone = settings.dropzone ? settings.dropzone : null;
             u.file  = settings.file;
 
             // the file starts automatically by default; you have to set
@@ -184,6 +185,7 @@
             settings.acl = settings.acl || 'public-read';
 
             // various callbacks
+            settings.on_add = settings.on_add                       || function() {};
             settings.on_progress = settings.on_progress             || function() {};
             settings.on_chunk_progress = settings.on_chunk_progress || function() {};
             settings.on_select = settings.on_select                 || function() {};
@@ -207,39 +209,70 @@
             // to select a file
             u.set_state("waiting");
 
+            //support for multiple files upload
+            u.files = [];
+            u.current_file_index = -1;
+            u.files_uploaded = 0;
+            u.files_total_uploaded_size = 0;
+
             if (u.input) {
                 u.input.onchange = function(e) {
-                    if(!u.settings.autostart) {
-                        return true;
-                    }
-                    // the `onchange` event may be triggered multiple times, so we
-                    // must ensure that the callback is only executed the first time
-                    if(u.get_state() != "waiting") {
-                        return false;
-                    }
+                    u.add_files(e.target.files);
 
-                    //support for multiple files upload
-                    u.files = e.target.files;
-                    u.current_file_index = -1;
-                    u.files_uploaded = 0;
-                    u.files_total = u.files.length;
-                    //remember total filesize for use in total progress
-                    u.files_total_size = 0;
-                    u.files_total_uploaded_size = 0;
-                    for (var i = 0; i < u.files_total; i++) {
-                        u.files_total_size+=u.files[i].size;
-                    }
-
-                    //proceed with first file
-                    u.upload_file();
                     return true;
                 };
+            }
+
+            // Drag drop support
+            if ( u.dropzone )
+            {
+                u.dropzone.addEventListener('drop', function(event) {
+                    event.stopPropagation();
+                    event.preventDefault();
+
+                    u.add_files(event.dataTransfer.files);
+                });
+
+                u.dropzone.addEventListener('dragover', function(event) {
+                    event.stopPropagation();
+                    event.preventDefault();
+                });
             }
 
             // trigger the init event callback
             setTimeout(function() {
                 u.settings.on_init.apply(u);
             }, 100);
+        }
+
+        Uploader.prototype.add_files = function(files) {
+            var u = this;
+
+            for (var i = 0; i < files.length; i++) {
+                this.files.push(files[i]);
+
+                u.settings.on_add.call(u, files[i]);
+            }
+
+            this.files_total = this.files.length;
+            this.files_total = this.files.length;
+            //remember total filesize for use in total progress
+            this.files_total_size = 0;
+            for (var i = 0; i < this.files_total; i++) {
+                this.files_total_size += this.files[i].size;
+            }
+
+            if(!this.settings.autostart) {
+                return true;
+            }
+            // the `onchange` event may be triggered multiple times, so we
+            // must ensure that the callback is only executed the first time
+            if(this.get_state() != "waiting") {
+                return false;
+            }
+
+            //proceed with first file
+            this.upload_file();
         }
 
         Uploader.prototype.start = function() {
@@ -266,7 +299,7 @@
             }
 
             //reset for new file
-            u.settings.on_progress.call(u, 0, 0);
+            u.settings.on_progress.call(u, 0, 0, null);
             u.upload_id = null;
             u._progress = null;
             u._total_progress = null;
@@ -348,10 +381,9 @@
             if ( u.settings.on_select.call(u, file, u.on_selected)=== false ) {
                 // if on_select returns exactly false - just wait for on_selected callback;
             } else {
-            //otherwise - just proceed with upload
+                //otherwise - just proceed with upload
                 u.on_selected(file);
             }
-
         };
 
         //called after on_select event
@@ -452,7 +484,7 @@
                 u.settings.on_start.call(u, u.file);
 
                 // and also trigger a progress callback with 0%
-                u.settings.on_progress.call(u, 0, u.file.size);
+                u.settings.on_progress.call(u, 0, u.file.size, u.file);
                 u._start_fired = true;
             }
 
@@ -461,7 +493,7 @@
 
             // at this point we may have some chunks already uploaded,
             // so we may trigger a progress callback with the reported progress
-            u.settings.on_progress.call(u, u.get_total_progress(), u.file.size);
+            u.settings.on_progress.call(u, u.get_total_progress(), u.file.size, u.file);
 
             // get the next chunk
             var next_chunk = u.get_next_chunk();
@@ -594,7 +626,7 @@
                 u.set_progress(chunk, e.loaded);
 
                 // trigger the progress event callback
-                u.settings.on_progress.call(u, u.get_total_progress(), u.file.size);
+                u.settings.on_progress.call(u, u.get_total_progress(), u.file.size, u.file);
 
                 // update the last_progress_time for the watcher interval
                 last_progress_time = new Date();
@@ -611,7 +643,7 @@
                     u.notify_upload_finished();
 
                     // trigger a final progress event callback, with 100%
-                    u.settings.on_progress.call(u, u.file.size, u.file.size);
+                    u.settings.on_progress.call(u, u.file.size, u.file.size, u.file);
 
                     u.files_total_uploaded_size += u.file.size;
 
@@ -696,17 +728,17 @@
             // change the upload's state
             u.set_state("finishing");
 
-            u.settings.on_progress.call(u, u.file.size, u.file.size); // 100% done.
+            u.settings.on_progress.call(u, u.file.size, u.file.size, u.file); // 100% done.
 
             var handler = function(e) {
                 // i.e. if it's a 2XX response
                 if(e.target.status / 100 == 2) {
                     log("Finished file.");
                     u.set_state("finished");
-                    u.settings.on_progress.call(u, u.file.size, u.file.size); // it's 100% done
+                    u.settings.on_progress.call(u, u.file.size, u.file.size, u.file); // it's 100% done
 
                     // trigger the complete event callback
-                    u.settings.on_complete.call(u);
+                    u.settings.on_complete.call(u, u.file);
                     u.files_total_uploaded_size += u.file.size;
 
                     //upload next file if any
@@ -844,7 +876,7 @@
             callback = callback || function() {};
             u.set_state("canceled");
             u._chunk_xhr = u._chunk_xhr || [];
-            u.settings.on_progress.call(u, 0, 0);
+            u.settings.on_progress.call(u, 0, 0, null);
             u._chunk_xhr = null;
             u._chunks = null;
             u._uploading_chunks = null;
@@ -1016,6 +1048,7 @@
         };
 
         Uploader.prototype.on_chunk_progress = function(f) { this.settings.on_chunk_progress = f; };
+        Uploader.prototype.on_add = function(f) { this.settings.on_add = f; };
         Uploader.prototype.on_progress = function(f) { this.settings.on_progress = f; };
         Uploader.prototype.on_select = function(f) { this.settings.on_select = f; };
         Uploader.prototype.on_error = function(f) { this.settings.on_error = f; };
