@@ -426,7 +426,7 @@
                     if(!u.upload_id) {
                         AmazonXHR.init(json, u.settings.key, file, u.settings, function(e) {
                             if(e.target.status / 100 != 2) {
-                                return u.settings.on_error(e);
+                                return u.settings.on_error(e, file);
                             }
                             var xml = e.target.responseXML;
 
