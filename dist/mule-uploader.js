@@ -1,4 +1,4 @@
-/*! mule-uploader - v1.2.0 - 2018-04-05
+/*! mule-uploader - v1.2.0 - 2018-04-06
 * https://github.com/cinely/mule-uploader
 * Copyright (c) 2018 Gabi Purcaru; Licensed MIT */
 (function(namespace){
@@ -420,7 +420,7 @@
                     if(!u.upload_id) {
                         AmazonXHR.init(json, u.settings.key, file, u.settings, function(e) {
                             if(e.target.status / 100 != 2) {
-                                return u.settings.on_error(e);
+                                return u.settings.on_error(e, file);
                             }
                             var xml = e.target.responseXML;
 
