@@ -4,29 +4,27 @@
   "authors": [
     "Gabi Purcaru"
   ],
-  "homepage": "https://github.com/cinely/mule-uploader",
+  "homepage": "https://github.com/Flynsarmy/mule-uploader",
   "description": "Subborn HTML5 File Uploader for Amazon S3",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cinely/mule-uploader"
+    "url": "https://github.com/Flynsarmy/mule-uploader"
   },
   "main": "./src/mule-uploader.js",
   "engines": {
     "node": ">= 0.10.0"
   },
   "dependencies": {
-    "crypto-js": "^3.1.6",
-    "npm": "^5.8.0"
+    "crypto-js": "^3.1.9-1"
   },
   "devDependencies": {
-    "grunt": "^1.0",
-    "grunt-bower-version": "^0.1.1",
+    "grunt": "^1.0.4",
     "grunt-contrib-concat": "~1.0",
-    "grunt-contrib-jshint": "~1.0",
-    "grunt-contrib-qunit": "~1.2",
-    "grunt-contrib-uglify": "~2.0",
-    "grunt-contrib-watch": "~1.0"
+    "grunt-contrib-jshint": "~2.1",
+    "grunt-contrib-qunit": "~3.1",
+    "grunt-contrib-uglify": "~4.0",
+    "grunt-contrib-watch": "~1.1"
   },
   "scripts": {
     "postversion": "grunt"

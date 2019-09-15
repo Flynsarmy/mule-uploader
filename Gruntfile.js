@@ -60,9 +60,6 @@ module.exports = function(grunt) {
         files: '<%= jshint.lib_test.src %>',
         tasks: ['jshint:lib_test', 'qunit']
       }
-    },
-    bower_version: {
-      update: []
     }
   });
 
@@ -72,10 +69,9 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-contrib-qunit');
   grunt.loadNpmTasks('grunt-contrib-jshint');
   grunt.loadNpmTasks('grunt-contrib-watch');
-  grunt.loadNpmTasks('grunt-bower-version');
 
 
   // Default task.
-  grunt.registerTask('default', ['concat', 'uglify', 'bower_version']);
+  grunt.registerTask('default', ['concat', 'uglify']);
 
 };
