@@ -1,6 +1,6 @@
-/*! mule-uploader - v1.2.0 - 2018-04-06
-* https://github.com/cinely/mule-uploader
-* Copyright (c) 2018 Gabi Purcaru; Licensed MIT */
+/*! mule-uploader - v1.2.0 - 2019-09-16
+* https://github.com/Flynsarmy/mule-uploader
+* Copyright (c) 2019 Gabi Purcaru; Licensed MIT */
 (function(namespace){
 
     // AJAX helper. It takes an object that contains load_callback, error_callback,
