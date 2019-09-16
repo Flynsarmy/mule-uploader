@@ -1185,7 +1185,7 @@
             },
             headers: {
                 "x-amz-acl": "public-read",
-                "Content-Disposition": u_settings.content_disposition ? "attachment; filename=" + file.name : '',
+                "Content-Disposition": u_settings.content_disposition ? u_settings.content_disposition : ("attachment; filename=" + file.name),
                 "Content-Type": auth.content_type || "application/octet-stream"
             },
             payload: "",
