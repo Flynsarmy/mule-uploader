@@ -67,6 +67,10 @@
                     key: "<?php echo $key ?>",
                     ajax_base: "backend",
 
+                    metadata: {
+                        "Cache-Control": "max-age=31536000"
+                    },
+
 
                     max_size: 50 * (1 << 30), // 50 gb
                     on_error: function() {

@@ -163,6 +163,10 @@
             // the Amazon S3 access key. DO NOT give the AWS Secret code!
             settings.access_key = settings.access_key;
 
+            // Any extra metadata to be added to the file on upload. For example
+            // Cache-Control.
+            settings.metadata = settings.metadata || {};
+
             // the Mime-Type of the content. You must match this with the backend value
             // or you'll get an Invalid Signature error. If unsure about the
             // mime type, use application/octet-stream
@@ -171,7 +175,7 @@
 
             //if content_disposition is explicitly set to false - don't add it to requests
             //otherwise all uploaded files will be uploaded as an "attachment"
-            settings.content_disposition = settings.content_disposition !== false;
+            settings.content_disposition = settings.content_disposition  || "";
 
 
             // acl can be set to:
@@ -1189,11 +1193,11 @@
             querystring: {
                 "uploads": ""
             },
-            headers: {
+            headers: utils.extend_object({
                 "x-amz-acl": "public-read",
                 "Content-Disposition": u_settings.content_disposition ? u_settings.content_disposition : ("attachment; filename=" + file.name),
-                "Content-Type": auth.content_type || "application/octet-stream"
-            },
+                "Content-Type": u_settings.content_type || "application/octet-stream"
+            }, u_settings.metadata),
             payload: "",
             load_callback: callback
         }).send();
