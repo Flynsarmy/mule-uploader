@@ -1,11 +1,14 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
     <head>
         <title>Mule Uploader</title>
-        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
-        <link href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" rel="stylesheet" media="screen">
-        <script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
-        <script type="text/javascript" id="mule" src="../mule-uploader.js"></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/core.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/hmac.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/sha256.min.js"></script>
+        <script src="../dist/mule-uploader.min.js"></script>
         <style>
             body {
                 background:
@@ -52,14 +55,13 @@
                     return parseInt(num_bytes / 1024 / 1024 / 1024, 10) + "." + parseInt(num_bytes / 1024 / 1024 / 1024 * 10, 10) % 10 + " GB";
                 }
             }
-            $(function() {
+            jQuery(function($) {
                 var last_update = null;
                 var last_uploaded = null;
                 var settings = {
 
                     file_input: document.getElementById("file"),
                     access_key: "<?php echo $backend->AWS_ACCESS_KEY ?>",
-                    content_type: "<?php echo $backend->MIME_TYPE ?>",
                     bucket: "<?php echo $backend->BUCKET ?>",
                     region: "<?php echo $backend->REGION ?>",
                     key: "<?php echo $key ?>",

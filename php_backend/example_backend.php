@@ -154,6 +154,8 @@ class Backend {
         }
 
         if($action == 'signing_key') {
+            header('Content-Type: application/json');
+            
             $date = new DateTime('NOW');
             $date->setTimeZone(new DateTimeZone('UTC'));
             $signature = $this->get_signature($date);
